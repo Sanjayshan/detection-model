@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 from ultralytics import YOLO
 import os
@@ -18,7 +18,7 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 @app.route('/')
 def home():
-    return "Server Running"
+    return render_template('index.html')
 
 @app.route('/results/<filename>')
 def get_result_image(filename):
@@ -52,4 +52,4 @@ def predict():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
