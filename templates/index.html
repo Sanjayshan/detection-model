@@ -98,44 +98,69 @@
     <!-- Result -->
     <div id="result"></div>
 
-    <script>
-        const input = document.getElementById("imageInput");
-        const preview = document.getElementById("preview");
+   <script>
+    const input = document.getElementById("imageInput");
+    const preview = document.getElementById("preview");
 
-        // Show preview when image selected
-        input.addEventListener("change", function () {
-            const file = input.files[0];
-            preview.src = URL.createObjectURL(file);
-        });
+    // Show preview when image selected
+    input.addEventListener("change", function () {
+        const file = input.files[0];
+        preview.src = URL.createObjectURL(file);
+    });
 
-        async function uploadImage() {
-            const file = input.files[0];
+    async function uploadImage() {
+        const file = input.files[0];
 
-            if (!file) {
-                alert("Please select an image");
+        if (!file) {
+            alert("Please select an image");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("image", file);
+
+        try {
+            const response = await fetch("/predict", {
+                method: "POST",
+                body: formData
+            });
+
+            const text = await response.text();
+            console.log(text);
+
+            let data;
+
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                document.getElementById("result").innerHTML = `
+                    <p>Server Error</p>
+                    <pre style="color:white; text-align:left; width:80%; margin:auto; white-space:pre-wrap;">${text}</pre>
+                `;
                 return;
             }
 
-            const formData = new FormData();
-            formData.append("image", file);
+            let imageHtml = "";
 
-            try {
-                const response = await fetch("/predict", {
-                    method: "POST",
-                    body: formData
-                });
-                const data = await response.json();
-
-               document.getElementById("result").innerHTML = `
-                    <p>${data.result}</p>
-                    <img src="${data.image_url}" style="width:400px; margin-top:20px; border-radius:10px; border:2px solid white;">
-               `;
-            } catch (error) {
-                console.error(error);
-                alert("Error connecting to server");
+            if (data.image_url) {
+                imageHtml = `
+                    <img src="${data.image_url}" 
+                         style="width:400px; margin-top:20px; border-radius:10px; border:2px solid white;">
+                `;
             }
-        }
-    </script>
 
+            document.getElementById("result").innerHTML = `
+                <p>${data.result}</p>
+                ${imageHtml}
+            `;
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById("result").innerHTML = `
+                <p>Error connecting to server</p>
+            `;
+        }
+    }
+</script>
 </body>
 </html>
