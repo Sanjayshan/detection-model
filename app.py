@@ -5,6 +5,7 @@ from ultralytics import YOLO
 import os
 import uuid
 import cv2
+import numpy as np
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -22,38 +23,50 @@ if not os.path.exists(MODEL_PATH):
 
 model = YOLO(MODEL_PATH)
 
+# Warm up model at startup — forces fuse_conv_and_bn to run now,
+# not on the first request (which would timeout the gunicorn worker)
+app.logger.info("Warming up model...")
+model(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
+app.logger.info("Model warm-up complete ✅")
+
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 RESULT_FOLDER = os.path.join(BASE_DIR, "results")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
+
 @app.route('/')
 def home():
     return render_template('index.html')
+
 
 @app.route('/results/<filename>')
 def get_result_image(filename):
     return send_from_directory(RESULT_FOLDER, filename)
 
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
         if 'image' not in request.files:
-            return jsonify({"result": "No image uploaded"})
+            return jsonify({"result": "No image uploaded"}), 400
 
         file = request.files['image']
 
         if file.filename == '':
-            return jsonify({"result": "No selected image"})
+            return jsonify({"result": "No selected image"}), 400
 
         unique_name = str(uuid.uuid4()) + ".jpg"
         filepath = os.path.join(UPLOAD_FOLDER, unique_name)
         file.save(filepath)
+        app.logger.info(f"Saved upload: {filepath}")
 
-        print("Saved upload:", filepath)
+        if not os.path.exists(filepath):
+            return jsonify({"result": "Failed to save uploaded image"}), 500
 
-        results = model(filepath)
+        results = model(filepath, verbose=False)
+        app.logger.info("Inference complete")
 
         plotted_image = results[0].plot()
 
@@ -61,27 +74,38 @@ def predict():
         result_path = os.path.join(RESULT_FOLDER, result_filename)
 
         saved = cv2.imwrite(result_path, plotted_image)
+        if not saved:
+            app.logger.error(f"cv2.imwrite failed: {result_path}")
+            return jsonify({"result": "Failed to save result image"}), 500
 
-        print("Saved result image:", saved)
-        print("Result path:", result_path)
+        app.logger.info(f"Result saved: {result_path}")
 
         image_url = request.host_url + "results/" + result_filename
 
-        print("Image URL:", image_url)
+        labels = []
+        for box in results[0].boxes:
+            cls_id = int(box.cls[0])
+            label = results[0].names[cls_id]
+            conf = float(box.conf[0])
+            labels.append({"label": label, "confidence": round(conf, 2)})
+
+        app.logger.info(f"Detections: {labels}")
 
         return jsonify({
             "result": "Prediction completed",
-            "image_url": image_url
+            "image_url": image_url,
+            "detections": labels
         })
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-
         return jsonify({
             "result": "Server error",
             "error": str(e)
         }), 500
+
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
