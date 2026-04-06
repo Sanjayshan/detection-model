@@ -13,7 +13,7 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'best.pt')
+MODEL_PATH = os.path.join(BASE_DIR, 'best.onnx')
 
 app.logger.info(f"Looking for model at: {MODEL_PATH}")
 app.logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
@@ -108,4 +108,4 @@ def predict():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True)  
