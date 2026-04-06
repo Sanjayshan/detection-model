@@ -13,7 +13,7 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'best.pt')
+MODEL_PATH = os.path.join(BASE_DIR, 'best.onnx')
 
 app.logger.info(f"Looking for model at: {MODEL_PATH}")
 app.logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
