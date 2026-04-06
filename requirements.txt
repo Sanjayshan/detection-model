@@ -5,5 +5,4 @@ ultralytics
 opencv-python-headless
 numpy
 pillow
-onnx
 onnxruntime

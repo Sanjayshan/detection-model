@@ -7,7 +7,7 @@ import uuid
 import cv2
 import numpy as np
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 CORS(app)
@@ -16,18 +16,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'best.onnx')
 
 app.logger.info(f"Looking for model at: {MODEL_PATH}")
-app.logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
 
-model = YOLO(MODEL_PATH, task='detect')
+# 🔥 Lazy load model (IMPORTANT)
+model = None
 
-# Warm up model at startup — forces fuse_conv_and_bn to run now,
-# not on the first request (which would timeout the gunicorn worker)
-app.logger.info("Warming up model...")
-model(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
-app.logger.info("Model warm-up complete ✅")
+def get_model():
+    global model
+    if model is None:
+        app.logger.info("Loading YOLO model...")
+        model = YOLO(MODEL_PATH, task='detect')
+        app.logger.info("Model loaded successfully ✅")
+    return model
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 RESULT_FOLDER = os.path.join(BASE_DIR, "results")
@@ -60,10 +62,14 @@ def predict():
         unique_name = str(uuid.uuid4()) + ".jpg"
         filepath = os.path.join(UPLOAD_FOLDER, unique_name)
         file.save(filepath)
+
         app.logger.info(f"Saved upload: {filepath}")
 
         if not os.path.exists(filepath):
             return jsonify({"result": "Failed to save uploaded image"}), 500
+
+        # 🔥 Load model only when needed
+        model = get_model()
 
         results = model(filepath, verbose=False)
         app.logger.info("Inference complete")
@@ -78,8 +84,6 @@ def predict():
             app.logger.error(f"cv2.imwrite failed: {result_path}")
             return jsonify({"result": "Failed to save result image"}), 500
 
-        app.logger.info(f"Result saved: {result_path}")
-
         image_url = request.host_url + "results/" + result_filename
 
         labels = []
@@ -87,7 +91,10 @@ def predict():
             cls_id = int(box.cls[0])
             label = results[0].names[cls_id]
             conf = float(box.conf[0])
-            labels.append({"label": label, "confidence": round(conf, 2)})
+            labels.append({
+                "label": label,
+                "confidence": round(conf, 2)
+            })
 
         app.logger.info(f"Detections: {labels}")
 
@@ -100,6 +107,7 @@ def predict():
     except Exception as e:
         import traceback
         traceback.print_exc()
+
         return jsonify({
             "result": "Server error",
             "error": str(e)
@@ -108,4 +116,4 @@ def predict():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)  
+    app.run(host='0.0.0.0', port=port)
