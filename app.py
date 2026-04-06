@@ -39,60 +39,49 @@ def get_result_image(filename):
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        app.logger.info("Predict endpoint hit")
-
         if 'image' not in request.files:
-            return jsonify({"result": "No image uploaded"}), 400
+            return jsonify({"result": "No image uploaded"})
 
         file = request.files['image']
 
         if file.filename == '':
-            return jsonify({"result": "No selected image"}), 400
+            return jsonify({"result": "No selected image"})
 
         unique_name = str(uuid.uuid4()) + ".jpg"
         filepath = os.path.join(UPLOAD_FOLDER, unique_name)
         file.save(filepath)
-        app.logger.info(f"Image saved to: {filepath}")
 
-        if not os.path.exists(filepath):
-            return jsonify({"result": "Failed to save uploaded image"}), 500
+        print("Saved upload:", filepath)
 
         results = model(filepath)
-        app.logger.info("Inference complete")
 
         plotted_image = results[0].plot()
 
         result_filename = "result_" + unique_name
         result_path = os.path.join(RESULT_FOLDER, result_filename)
 
-        success = cv2.imwrite(result_path, plotted_image)
-        if not success:
-            app.logger.error(f"cv2.imwrite failed for path: {result_path}")
-            return jsonify({"result": "Failed to save result image"}), 500
+        saved = cv2.imwrite(result_path, plotted_image)
 
-        app.logger.info(f"Result saved to: {result_path}")
+        print("Saved result image:", saved)
+        print("Result path:", result_path)
 
         image_url = request.host_url + "results/" + result_filename
 
-        labels = []
-        for box in results[0].boxes:
-            cls_id = int(box.cls[0])
-            label = results[0].names[cls_id]
-            conf = float(box.conf[0])
-            labels.append({"label": label, "confidence": round(conf, 2)})
+        print("Image URL:", image_url)
 
         return jsonify({
             "result": "Prediction completed",
-            "image_url": image_url,
-            "detections": labels
+            "image_url": image_url
         })
 
     except Exception as e:
-        app.logger.exception("Error during prediction")
-        return jsonify({
-            "result": f"Server error: {str(e)}"
-        }), 500
+        import traceback
+        traceback.print_exc()
 
+        return jsonify({
+            "result": "Server error",
+            "error": str(e)
+        }), 500
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
