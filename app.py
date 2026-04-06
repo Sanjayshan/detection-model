@@ -13,7 +13,7 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'best.onnx')
+MODEL_PATH = os.path.join(BASE_DIR, 'best.pt')
 
 app.logger.info(f"Looking for model at: {MODEL_PATH}")
 app.logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
@@ -21,7 +21,7 @@ app.logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
 
-model = YOLO(MODEL_PATH)
+model = YOLO(MODEL_PATH, task='detect')
 
 # Warm up model at startup — forces fuse_conv_and_bn to run now,
 # not on the first request (which would timeout the gunicorn worker)
