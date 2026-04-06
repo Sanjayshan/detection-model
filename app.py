@@ -20,16 +20,21 @@ app.logger.info(f"Looking for model at: {MODEL_PATH}")
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
 
-# 🔥 Lazy load model (IMPORTANT)
+# ✅ Lazy load model (IMPORTANT)
 model = None
 
 def get_model():
     global model
     if model is None:
-        app.logger.info("Loading YOLO model...")
-        model = YOLO(MODEL_PATH, task='detect')
-        app.logger.info("Model loaded successfully ✅")
+        try:
+            app.logger.info("Loading YOLO model...")
+            model = YOLO(MODEL_PATH)
+            app.logger.info("Model loaded successfully ✅")
+        except Exception as e:
+            app.logger.error(f"Model loading failed: {e}")
+            raise e
     return model
+
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 RESULT_FOLDER = os.path.join(BASE_DIR, "results")
@@ -65,13 +70,14 @@ def predict():
 
         app.logger.info(f"Saved upload: {filepath}")
 
-        if not os.path.exists(filepath):
-            return jsonify({"result": "Failed to save uploaded image"}), 500
-
-        # 🔥 Load model only when needed
+        # ✅ Load model only when needed
         model = get_model()
 
-        results = model(filepath, verbose=False)
+        # ✅ Resize image (prevents memory crash)
+        img = cv2.imread(filepath)
+        img = cv2.resize(img, (640, 640))
+
+        results = model(img, verbose=False)
         app.logger.info("Inference complete")
 
         plotted_image = results[0].plot()
@@ -81,7 +87,6 @@ def predict():
 
         saved = cv2.imwrite(result_path, plotted_image)
         if not saved:
-            app.logger.error(f"cv2.imwrite failed: {result_path}")
             return jsonify({"result": "Failed to save result image"}), 500
 
         image_url = request.host_url + "results/" + result_filename
@@ -95,8 +100,6 @@ def predict():
                 "label": label,
                 "confidence": round(conf, 2)
             })
-
-        app.logger.info(f"Detections: {labels}")
 
         return jsonify({
             "result": "Prediction completed",
@@ -115,5 +118,5 @@ def predict():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5000))  # ✅ important for cloud
     app.run(host='0.0.0.0', port=port)
